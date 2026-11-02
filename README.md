@@ -2,7 +2,7 @@
 
 A silly, low-poly, single-player gym management game for desktop and phone browsers. Rent a property, place equipment and queues, set admission, maintain machines, and expand your gym.
 
-[Play the current published game](https://rep-city-gym-tycoon.steadyvine2.chatgpt.site/)
+[Play the current published game](https://rognhaugen.github.io/gym-bro-tycoon/)
 
 ## Local development
 
@@ -44,6 +44,6 @@ The build outputs `dist/`. GitHub Actions runs both checks for pushes and pull r
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). GitHub hosts source and runs checks; pushing here does not automatically deploy the currently hosted game.
+See [CONTRIBUTING.md](CONTRIBUTING.md). GitHub runs tests and builds for pushes and pull requests. Successful builds on `main` deploy automatically to GitHub Pages. Pull requests do not publish. The Pages build uses `/gym-bro-tycoon/` as its asset base path; local development keeps its normal root URL.
 
 No project license has been selected yet.
