@@ -1,4 +1,4 @@
-import {PROPERTIES, EXPANSIONS, doorwayReserved, type PropertyId} from "./properties";
+import {PROPERTIES, EXPANSIONS, doorwayReserved, roomContains, type PropertyId} from "./properties";
 import {
   EQUIPMENT,
   ENTRANCE,
@@ -57,8 +57,9 @@ export interface Item extends Cell {
   lane: Cell[];
   line: number[];
 }
-export type Need = "queues" | "noise" | "condition" | "variety";
+export type Need = "queues" | "noise" | "condition" | "variety" | "cleanliness";
 export interface NeedMetrics {
+  cleanliness?: number;
   queues: number;
   noise: number;
   condition: number;
@@ -83,6 +84,7 @@ export interface Member extends Cell {
   departureLane?: Cell[];
   needs?: NeedMetrics;
   noiseSeconds?: number;
+  dirtSeconds?: number;
   retriedActivity?: number;
   thought?: { topic: string; text: string; at: number };
   thoughtTopics?: string[];
@@ -97,6 +99,7 @@ export interface Day {
   visits: Visit[];
 }
 export interface State {
+  puddles?: Cell[];
   property?: PropertyId;
   expanded?: boolean;
   version: 2;
@@ -127,6 +130,7 @@ export interface State {
 export function rent(s: State) {return s.property ? PROPERTIES[s.property].rent + (s.expanded ? EXPANSIONS[s.property].rent : 0) : CONFIG.rent;}
 export function initial(property?: PropertyId): State {
   return {
+    puddles: [],
     version: 2,
     queueVersion: 2,
     dumbbellRackVersion: 2,
@@ -501,14 +505,15 @@ function move(m: Member, dt: number) {
   }
   return m.path.length === 0;
 }
-const NEED_CAPS: NeedMetrics = { queues: 30, noise: 15, condition: 15, variety: 15 };
+const NEED_CAPS: Record<Need,number> = { queues: 30, noise: 15, condition: 15, variety: 15, cleanliness: 10 };
 export function needPenalty(m: Member, need: Need, amount: number) {
   m.needs ??= { queues: 0, noise: 0, condition: 0, variety: 0 };
-  const before = m.needs[need];
+  const before = m.needs[need] ?? 0;
   m.needs[need] = Math.min(NEED_CAPS[need], before + Math.max(0, amount));
   m.score -= m.needs[need] - before;
 }
 const THOUGHTS: Record<string, string[]> = {
+  cleanliness: ["Is that sweat or a new indoor pool?", "Someone skipped towel day.", "This floor needs a cleaning workout."],
   queues: ["I've warmed up. And cooled down. Still waiting.", "This queue is my endurance workout.", "This line is longer than my workout."],
   noise: ["Could we lift without the sound effects?", "My ears weren't on today's workout plan.", "That scream needs its own room."],
   condition: ["That wobble isn't part of the exercise.", "This machine needs a repair day.", "I'd like my equipment in one piece."],
@@ -705,6 +710,15 @@ export function tick(s: State, dt: number) {
       admit(s, Math.floor(random(s) * 3));
   }
   for (const m of [...s.members]) {
+    if(m.state !== "leaving") {
+      const position=workoutPosition(s,m);
+      const nearby=(s.puddles ?? []).filter(p=>Math.hypot(p.x-position.x,p.z-position.z)<1.8).length;
+      if(nearby) {
+        needPenalty(m,"cleanliness",dt*.18*Math.min(nearby,3));
+        m.dirtSeconds=(m.dirtSeconds ?? 0)+dt;
+        if(m.dirtSeconds>=5){visitorThought(s,m,"cleanliness");m.feedback="Someone skipped towel day. This floor needs cleaning.";}
+      }
+    }
     if (m.state === "leaving") {
       if (move(m, dt)) finishVisit(s, m);
       continue;
@@ -818,6 +832,7 @@ export function tick(s: State, dt: number) {
       m.score -= 20;
       leave(s, m, "Equipment quit before I did.");
     } else if (m.timer <= 0) {
+      leaveSweat(s,i,m.type);
       m.activity++;
       if (m.activity >= m.routine.length) {
         if (m.score >= 85) visitorThought(s, m, "good");
@@ -848,6 +863,8 @@ export function deserialize(raw: string): State {
     !Array.isArray(s.days)
   )
     throw Error("Unsupported or damaged save.");
+  s.puddles ??= [];
+  if(!Array.isArray(s.puddles)||s.puddles.length>612||s.puddles.some((p:Cell)=>!p||!Number.isInteger(p.x)||!Number.isInteger(p.z)||!roomContains(s.property,p,Boolean(s.expanded))) || new Set(s.puddles.map(key)).size!==s.puddles.length)throw Error("Damaged floor cleanliness.");
   // Retain historical cash, but discard the removed recovery-loan state.
   delete s.loanUsed;
   delete s.loanDays;
@@ -943,7 +960,7 @@ export function deserialize(raw: string): State {
     if (m.retriedActivity !== undefined && (!Number.isInteger(m.retriedActivity) || m.retriedActivity < 0 || m.retriedActivity > m.activity))
       throw Error("Damaged visitor retry state.");
     if (m.needs && Object.entries(NEED_CAPS).some(([key, cap]) =>
-      !Number.isFinite(m.needs[key]) || m.needs[key] < 0 || m.needs[key] > cap))
+      !Number.isFinite(m.needs[key] ?? (key === "cleanliness" ? 0 : NaN)) || (m.needs[key] ?? 0) < 0 || (m.needs[key] ?? 0) > cap))
       throw Error("Damaged visitor needs.");
     if (m.thought && (!Object.hasOwn(THOUGHTS, m.thought.topic) ||
       typeof m.thought.text !== "string" || m.thought.text.length > 160 ||
@@ -951,6 +968,7 @@ export function deserialize(raw: string): State {
     if (m.thoughtTopics && (!Array.isArray(m.thoughtTopics) ||
       m.thoughtTopics.some((topic: unknown) => typeof topic !== "string" || !Object.hasOwn(THOUGHTS, topic))))
       throw Error("Damaged visitor thought history.");
+    if(m.dirtSeconds !== undefined && (!Number.isFinite(m.dirtSeconds)||m.dirtSeconds<0))throw Error("Damaged dirt exposure.");
     if (m.noiseSeconds !== undefined && (!Number.isFinite(m.noiseSeconds) || m.noiseSeconds < 0))
       throw Error("Damaged noise exposure.");
     if (
@@ -1017,4 +1035,24 @@ export function expand(s:State):string {
  s.money-=e.cost;s.capital-=e.cost;s.expanded=true;
  log(s,`${e.name} purchased for $${e.cost}. Daily rent is now $${rent(s)}.`);
  return "";
+}
+
+
+export function leaveSweat(s:State,item:Item,type:number):boolean {
+  if(s.paused||s.bankrupt||random(s)> (type===0 ? .35 : .2))return false;
+  const entry=access(item), blocked=blockedCells(s.items,true,undefined,s.property,s.expanded);
+  const candidates:Cell[]=[];
+  for(let x=entry.x-2;x<=entry.x+2;x++)for(let z=entry.z-2;z<=entry.z+2;z++){
+    const c={x,z};
+    if(Math.hypot(x-entry.x,z-entry.z)>2||!roomContains(s.property,c,Boolean(s.expanded))||same(c,ENTRANCE)||doorwayReserved(s.property,c)||blocked.has(key(c))||(s.puddles??[]).some(p=>same(p,c)))continue;
+    if(route(s.items,entry,c,item.id,s.property,s.expanded))candidates.push(c);
+  }
+  if(!candidates.length)return false;
+  (s.puddles??=[]).push(candidates[Math.floor(random(s)*candidates.length)]);
+  return true;
+}
+export function cleanPuddle(s:State,c:Cell):boolean {
+  const index=(s.puddles??[]).findIndex(p=>same(p,c));
+  if(index<0)return false;
+  s.puddles!.splice(index,1);return true;
 }

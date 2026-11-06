@@ -227,3 +227,7 @@ Corner Gains keeps its original L-shaped notch. Its expansion is now a separate 
 ## Neighboring unit size — 13 October 2026
 
 Reduced the left-side expansion to 9×7 (63 room tiles plus the existing two-tile hall). Its doorway, price and rent remain unchanged.
+
+## Sweat and manual cleaning — 6 November 2026
+
+Completed workouts have a seeded 35% chance for Heavy Disciples, 20% for other visitors, to leave a puddle on a nearby public floor tile. Puddles avoid equipment, queues, entrance and reserved doorways, never block movement, never duplicate a tile, persist in saves and do not evaporate. Click/tap a puddle to clean immediately for free, including while paused. Nearby visitors accumulate a cleanliness penalty (0.18 happiness/second per nearby puddle, at most three counted, capped at 10 per visit); five seconds of exposure permits a contextual thought under the normal cooldown. Cleaning stops further exposure without erasing the visit's past penalty. Rating receives cleanliness through existing visitor experience, not an additional direct deduction. Cleaner staff, water, toilets and showers remain future work.

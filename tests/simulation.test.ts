@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   initial,
+  cleanPuddle,
+  leaveSweat,
   expand,
   rent,
   buy,
@@ -1083,4 +1085,35 @@ test("corner expansion preserves the L-shaped notch and has a protected left hal
  const m=member(s,{x:5,z:11,routine:["rack"]});choose(s,m);
  for(const x of [-2,-1,0,1])assert.ok(m.path.some(c=>c.x===x&&c.z===6));
  assert.equal(deserialize(JSON.stringify(s)).items[0].x,-10);
+});
+
+
+test("completed workouts can leave seeded sweat once, without blocking floor use",()=>{
+ const s=initial("closet");buy(s,"rack",3,3,0);s.spawn=99999;s.seed=1;
+ const item=s.items[0];member(s,{...access(item),type:0,state:"using",target:item.id,timer:.01,routine:["rack"]});
+ s.paused=false;tick(s,.05);assert.equal(s.puddles!.length,1);
+ const puddle=s.puddles![0];assert.ok(pathTo(s.items,{x:5,z:11},puddle,s.property,s.expanded));
+ tick(s,.05);assert.equal(s.puddles!.length,1);
+ const saved=deserialize(JSON.stringify(s));assert.deepEqual(saved.puddles,s.puddles);
+ const old={...s} as any;delete old.puddles;assert.deepEqual(deserialize(JSON.stringify(old)).puddles,[]);
+ assert.throws(()=>deserialize(JSON.stringify({...s,puddles:[{x:99,z:99}]})),/cleanliness/);
+});
+test("paused games create no sweat; active sweat is deterministic and never duplicates tiles",()=>{
+ const a=gym(),b=gym();const seed=a.seed;
+ assert.equal(leaveSweat(a,a.items[0],0),false);assert.equal(a.seed,seed);
+ a.paused=b.paused=false;
+ for(let n=0;n<100;n++){leaveSweat(a,a.items[0],0);leaveSweat(b,b.items[0],0);}
+ assert.deepEqual(a.puddles,b.puddles);assert.equal(new Set(a.puddles!.map(p=>`${p.x},${p.z}`)).size,a.puddles!.length);
+ assert.ok(a.puddles!.length>0);
+});
+test("nearby sweat prompts a thought, cleaning stops exposure and does not cost money",()=>{
+ const s=initial();s.spawn=99999;s.puddles=[{x:5,z:8}];
+ const near=member(s,{x:5,z:8,state:"resting",timer:999});
+ const far=member(s,{x:1,z:1,state:"resting",timer:999});
+ tick(s,10);assert.equal(near.score,90);
+ s.paused=false;for(let n=0;n<110;n++)tick(s,.05);
+ assert.equal(near.thought?.topic,"cleanliness");assert.ok(near.score<90);assert.equal(far.score,90);
+ const score=near.score,cash=s.money;s.paused=true;
+ assert.equal(cleanPuddle(s,{x:5,z:8}),true);assert.equal(cleanPuddle(s,{x:5,z:8}),false);
+ assert.equal(s.money,cash);s.paused=false;for(let n=0;n<100;n++)tick(s,.05);assert.equal(near.score,score);
 });

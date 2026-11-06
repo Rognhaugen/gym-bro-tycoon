@@ -22,6 +22,7 @@ Open the address printed by Vite. Choose a rental, add equipment with the Plus b
 - Select equipment to turn it off, repair, move, sell, or edit its queue.
 - Visitors leave through their machine's queue. Keep public access to the back of each queue.
 - Expansion doorways and halls must stay clear.
+- Click/tap blue-green sweat puddles to clean for free. Nearby dirt can lower visitor happiness.
 
 ## Checks
 

@@ -30,6 +30,7 @@ import "./style.css";
 import {
   initial,
   rent,
+  cleanPuddle,
   expand,
   tick,
   buy,
@@ -66,7 +67,7 @@ let queueId: number | null = null;
 let queueDraft: Cell[] = [];
 let pointerOnFloor = false;
 const app = document.querySelector<HTMLDivElement>("#app")!;
-app.innerHTML = `<main class="world" aria-label="Gym floor"><div id="scene"></div><div id="speechBubbles" aria-label="Visitor comments"></div><div id="maintenanceBadges" aria-label="Equipment maintenance"></div><div class="hud floating"><div><span class="label">Your cash</span><strong id="funds"></strong><span id="cashChange" aria-live="polite"></span></div><div><span class="label">Gym rating</span><strong id="rating"></strong></div><div class="day-block"><span id="day"></span><div id="dayTrack" role="progressbar" aria-label="Day progress" aria-valuemin="0" aria-valuemax="100"><i id="dayFill"></i><span class="rush-window"></span></div></div></div><nav id="primaryTools" class="floating" aria-label="Gym controls"><button id="newEquipment" aria-label="New equipment" title="New equipment"></button><button id="settings" aria-label="Settings" title="Settings" aria-expanded="false" aria-controls="settingsMenu"></button><button id="pause" aria-label="Resume" title="Resume"></button></nav><section id="settingsMenu" class="menu floating" aria-label="Settings" hidden><button id="admission">Adjust admission</button><button id="reportToggle">▥ Reports</button><button id="save">▣ Save</button><button id="load">↥ Load</button><button id="restart">↻ Restart</button></section><button id="expansionPurchase" hidden></button><div id="toast" role="status"></div><span id="queueMode" class="queue-mode" hidden></span><section class="dock"><div id="context" class="floating" hidden></div><nav id="tools" class="floating" aria-label="Gym tools"></nav></section><div class="camera"><button id="zoomIn" aria-label="Zoom in">＋</button><button id="zoomOut" aria-label="Zoom out">−</button><button id="home" aria-label="Reset camera">⌂</button></div><section id="reports" class="floating" hidden><div class="row"><h3>Floor report</h3><button id="closeReports" aria-label="Close reports">×</button></div><h3 id="goalTitle"></h3><p>Three profitable days. Every member type at 60% happiness or better.</p><p id="goalProgress"></p><p>Operating today: <b id="profit"></b> · On the floor: <b id="count"></b></p><h3>Member happiness</h3><div id="happiness"></div><h3>Word on the floor</h3><div id="logs"></div></section></main><dialog id="restartDialog"><h3>Start a fresh gym?</h3><p>Your current gym will be replaced. Your saved game stays available until the next save.</p><button id="keep">Keep playing</button><button id="reset">Restart gym</button></dialog><dialog id="gameOver"><h3>Bankrupt. Your gym is closed.</h3><p>You ran out of money. Start over and try a different strategy.</p><button id="startOver">Start over</button></dialog>`;
+app.innerHTML = `<main class="world" aria-label="Gym floor"><div id="scene"></div><div id="speechBubbles" aria-label="Visitor comments"></div><div id="puddleControls" aria-label="Floor cleaning"></div><div id="maintenanceBadges" aria-label="Equipment maintenance"></div><div class="hud floating"><div><span class="label">Your cash</span><strong id="funds"></strong><span id="cashChange" aria-live="polite"></span></div><div><span class="label">Gym rating</span><strong id="rating"></strong></div><div class="day-block"><span id="day"></span><div id="dayTrack" role="progressbar" aria-label="Day progress" aria-valuemin="0" aria-valuemax="100"><i id="dayFill"></i><span class="rush-window"></span></div></div></div><nav id="primaryTools" class="floating" aria-label="Gym controls"><button id="newEquipment" aria-label="New equipment" title="New equipment"></button><button id="settings" aria-label="Settings" title="Settings" aria-expanded="false" aria-controls="settingsMenu"></button><button id="pause" aria-label="Resume" title="Resume"></button></nav><section id="settingsMenu" class="menu floating" aria-label="Settings" hidden><button id="admission">Adjust admission</button><button id="reportToggle">▥ Reports</button><button id="save">▣ Save</button><button id="load">↥ Load</button><button id="restart">↻ Restart</button></section><button id="expansionPurchase" hidden></button><div id="toast" role="status"></div><span id="queueMode" class="queue-mode" hidden></span><section class="dock"><div id="context" class="floating" hidden></div><nav id="tools" class="floating" aria-label="Gym tools"></nav></section><div class="camera"><button id="zoomIn" aria-label="Zoom in">＋</button><button id="zoomOut" aria-label="Zoom out">−</button><button id="home" aria-label="Reset camera">⌂</button></div><section id="reports" class="floating" hidden><div class="row"><h3>Floor report</h3><button id="closeReports" aria-label="Close reports">×</button></div><h3 id="goalTitle"></h3><p>Three profitable days. Every member type at 60% happiness or better.</p><p id="goalProgress"></p><p>Operating today: <b id="profit"></b> · On the floor: <b id="count"></b></p><h3>Member happiness</h3><div id="happiness"></div><h3>Word on the floor</h3><div id="logs"></div></section></main><dialog id="restartDialog"><h3>Start a fresh gym?</h3><p>Your current gym will be replaced. Your saved game stays available until the next save.</p><button id="keep">Keep playing</button><button id="reset">Restart gym</button></dialog><dialog id="gameOver"><h3>Bankrupt. Your gym is closed.</h3><p>You ran out of money. Start over and try a different strategy.</p><button id="startOver">Start over</button></dialog>`;
 type PanelMode = "default" | "catalogue" | "admission";
 let panelMode: PanelMode = "default";
 let toolbarKey = "";
@@ -952,6 +953,7 @@ function animatePerson(g: THREE.Group, m: Member, item: Item | undefined) {
   }
 }
 function syncWorld() {
+  syncPuddles();
   for (const [id, g] of itemMeshes) {
     if (!state.items.some((i) => i.id === id)) {
       objects.remove(g);
@@ -1670,4 +1672,30 @@ function updateExpansionButton() {
  const point=new THREE.Vector3((e.minX+e.maxX)/2-5.5,.25,(e.minZ+e.maxZ)/2-5.5).project(camera);
  button.style.left=`${(point.x+1)*world.clientWidth/2}px`;button.style.top=`${(1-point.y)*world.clientHeight/2}px`;
  button.onclick=()=>{const error=expand(state);if(error){toast(error);return;}cancel();buildRoom();syncWorld();renderUI();toast("Room purchased. Your daily rent has increased.");save(true);};
+}
+
+
+const puddleMeshes = new Map<string,THREE.Group>();
+const puddleButtons = new Map<string,HTMLButtonElement>();
+function syncPuddles() {
+  const present=new Set((state.puddles??[]).map(p=>`${p.x},${p.z}`));
+  for(const [key,mesh] of puddleMeshes)if(!present.has(key)){scene.remove(mesh);disposeObject(mesh);puddleMeshes.delete(key);puddleButtons.get(key)?.remove();puddleButtons.delete(key);}
+  for(const p of state.puddles??[]) {
+    const key=`${p.x},${p.z}`;
+    if(!puddleMeshes.has(key)) {
+      const group=new THREE.Group();group.position.set(p.x-5.5,-.035,p.z-5.5);
+      for(const [x,z,scale] of [[0,0,1],[.2,.12,.55],[-.2,-.12,.45]]) {
+        const patch=new THREE.Mesh(new THREE.CircleGeometry(.33*scale,12),new THREE.MeshBasicMaterial({color:"#648e91",transparent:true,opacity:.65,depthWrite:false}));
+        patch.rotation.x=-Math.PI/2;patch.scale.y=.75;patch.position.set(x,.001*scale,z);group.add(patch);
+      }
+      scene.add(group);puddleMeshes.set(key,group);
+      const button=document.createElement("button");button.className="puddle-clean";button.setAttribute("aria-label",`Clean sweat puddle at ${p.x}, ${p.z}`);button.title="Clean sweat puddle";
+      button.onclick=()=>{if(cleanPuddle(state,p)){syncPuddles();toast("Sweat cleaned. Towel day saved.");}};
+      $("puddleControls").append(button);puddleButtons.set(key,button);
+    }
+    const position=new THREE.Vector3(p.x-5.5,0,p.z-5.5).project(camera);
+    const button=puddleButtons.get(key)!;
+    button.hidden=Boolean(tool)||queueId!==null||Math.abs(position.x)>1||Math.abs(position.y)>1;
+    button.style.left=`${(position.x+1)*world.clientWidth/2}px`;button.style.top=`${(1-position.y)*world.clientHeight/2}px`;
+  }
 }
