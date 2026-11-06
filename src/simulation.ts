@@ -1040,15 +1040,11 @@ export function expand(s:State):string {
 
 export function leaveSweat(s:State,item:Item,type:number):boolean {
   if(s.paused||s.bankrupt||random(s)> (type===0 ? .35 : .2))return false;
-  const entry=access(item), blocked=blockedCells(s.items,true,undefined,s.property,s.expanded);
-  const candidates:Cell[]=[];
-  for(let x=entry.x-2;x<=entry.x+2;x++)for(let z=entry.z-2;z<=entry.z+2;z++){
-    const c={x,z};
-    if(Math.hypot(x-entry.x,z-entry.z)>2||!roomContains(s.property,c,Boolean(s.expanded))||same(c,ENTRANCE)||doorwayReserved(s.property,c)||blocked.has(key(c))||(s.puddles??[]).some(p=>same(p,c)))continue;
-    if(route(s.items,entry,c,item.id,s.property,s.expanded))candidates.push(c);
-  }
-  if(!candidates.length)return false;
-  (s.puddles??=[]).push(candidates[Math.floor(random(s)*candidates.length)]);
+  // Exercisers step back onto queue tile 1 when finishing. Leave sweat
+  // there, where their feet reach the floor, rather than scattering it nearby.
+  const tile=access(item);
+  if(!roomContains(s.property,tile,Boolean(s.expanded))||same(tile,ENTRANCE)||doorwayReserved(s.property,tile)||(s.puddles??[]).some(p=>same(p,tile)))return false;
+  (s.puddles??=[]).push({...tile});
   return true;
 }
 export function cleanPuddle(s:State,c:Cell):boolean {

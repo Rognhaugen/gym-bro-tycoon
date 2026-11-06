@@ -231,3 +231,7 @@ Reduced the left-side expansion to 9×7 (63 room tiles plus the existing two-til
 ## Sweat and manual cleaning — 6 November 2026
 
 Completed workouts have a seeded 35% chance for Heavy Disciples, 20% for other visitors, to leave a puddle on a nearby public floor tile. Puddles avoid equipment, queues, entrance and reserved doorways, never block movement, never duplicate a tile, persist in saves and do not evaporate. Click/tap a puddle to clean immediately for free, including while paused. Nearby visitors accumulate a cleanliness penalty (0.18 happiness/second per nearby puddle, at most three counted, capped at 10 per visit); five seconds of exposure permits a contextual thought under the normal cooldown. Cleaning stops further exposure without erasing the visit's past penalty. Rating receives cleanliness through existing visitor experience, not an additional direct deduction. Cleaner staff, water, toilets and showers remain future work.
+
+## Sweat placement revision — 6 November 2026
+
+Sweat now appears on queue tile 1, where the visitor steps back onto the floor after exercising. Random nearby tile selection is removed. Spawn chance is unchanged; repeated sweat on the same tile does not create duplicate puddles.

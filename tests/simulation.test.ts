@@ -1092,7 +1092,7 @@ test("completed workouts can leave seeded sweat once, without blocking floor use
  const s=initial("closet");buy(s,"rack",3,3,0);s.spawn=99999;s.seed=1;
  const item=s.items[0];member(s,{...access(item),type:0,state:"using",target:item.id,timer:.01,routine:["rack"]});
  s.paused=false;tick(s,.05);assert.equal(s.puddles!.length,1);
- const puddle=s.puddles![0];assert.ok(pathTo(s.items,{x:5,z:11},puddle,s.property,s.expanded));
+ const puddle=s.puddles![0];assert.deepEqual(puddle,access(item));assert.ok(pathTo(s.items,{x:5,z:11},puddle,s.property,s.expanded));
  tick(s,.05);assert.equal(s.puddles!.length,1);
  const saved=deserialize(JSON.stringify(s));assert.deepEqual(saved.puddles,s.puddles);
  const old={...s} as any;delete old.puddles;assert.deepEqual(deserialize(JSON.stringify(old)).puddles,[]);
@@ -1116,4 +1116,15 @@ test("nearby sweat prompts a thought, cleaning stops exposure and does not cost 
  const score=near.score,cash=s.money;s.paused=true;
  assert.equal(cleanPuddle(s,{x:5,z:8}),true);assert.equal(cleanPuddle(s,{x:5,z:8}),false);
  assert.equal(s.money,cash);s.paused=false;for(let n=0;n<100;n++)tick(s,.05);assert.equal(near.score,score);
+});
+
+
+test("sweat stays on the workout departure tile for every equipment orientation",()=>{
+ for(const kind of ["rack","bike","freeweights","treadmill"] as const)for(let rotation=0;rotation<4;rotation++){
+  const s=initial();buy(s,kind,4,4,rotation);s.paused=false;s.seed=1;
+  assert.equal(leaveSweat(s,s.items[0],0),true);
+  assert.deepEqual(s.puddles,[access(s.items[0])]);
+  for(let n=0;n<30;n++)leaveSweat(s,s.items[0],0);
+  assert.deepEqual(s.puddles,[access(s.items[0])]);
+ }
 });
