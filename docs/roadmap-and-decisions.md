@@ -235,3 +235,7 @@ Completed workouts have a seeded 35% chance for Heavy Disciples, 20% for other v
 ## Sweat placement revision — 6 November 2026
 
 Sweat now appears on queue tile 1, where the visitor steps back onto the floor after exercising. Random nearby tile selection is removed. Spawn chance is unchanged; repeated sweat on the same tile does not create duplicate puddles.
+
+## Personal sweat buildup and wiping — 6 November 2026
+
+Replaces random per-exercise puddles. Each visitor has a seeded threshold of 2–3.5 sweat units, retained in saves. Completed rack/treadmill/bike/dumbbell activities add 1.2/1.15/0.85/0.9 units. At or above threshold, a visitor stops on the next clear public floor tile between exercises or while leaving; queues, equipment, entrance, reserved doorways, existing puddles and another wipe's tile are excluded. A 1.3-second forehead wipe releases a visible droplet, creating exactly one puddle beneath the visitor at 0.8 seconds and reducing buildup by the threshold. Pause freezes the gesture. Pending/partially completed wipes survive saving without duplicate puddles. No cosmetic wipes below threshold.

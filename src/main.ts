@@ -848,6 +848,8 @@ function person(m: Member) {
   if (hairStyle !== 0)
     upper.add(box(0.3, hairStyle === 2 ? 0.19 : 0.09, 0.3, hair, 0, 1.39, 0));
   if (hairStyle === 3) upper.add(box(0.23, 0.25, 0.12, hair, 0, 1.27, -0.17));
+  const drop=new THREE.Mesh(new THREE.SphereGeometry(.05,6,4),new THREE.MeshBasicMaterial({color:"#648e91"}));
+  drop.name="wipeDrop";drop.visible=false;g.add(drop);
   return g;
 }
 const upAxis = new THREE.Vector3(0, 1, 0);
@@ -865,11 +867,15 @@ function limb(
 }
 function isWalking(member: Member) {
   return (
-    member.path.length > 0 &&
+    !member.wipe && member.path.length > 0 &&
     ["walking", "leaving", "resting"].includes(member.state)
   );
 }
 function animatePerson(g: THREE.Group, m: Member, item: Item | undefined) {
+  const drop=g.getObjectByName("wipeDrop")!;
+  const t=m.wipe?.elapsed ?? -1;
+  drop.visible=t>=.45&&t<.8;
+  if(drop.visible)drop.position.set(.12,1.3*(1-(t-.45)/.35),.23);
   const working =
     m.state === "using" && item && !item.broken && item.condition > 0;
   const cycling = working && item.kind === "bike";
@@ -947,6 +953,13 @@ function animatePerson(g: THREE.Group, m: Member, item: Item | undefined) {
       weight.position.copy(hand);
       weight.position.z += 0.45;
       weight.rotation.z = side * Math.sin(phase + side * 0.6) * 0.2;
+    }
+    if(m.wipe&&side===1) {
+      const t=m.wipe.elapsed;
+      const lift=Math.min(1,t/.3,(1.3-t)/.3);
+      const across=Math.sin(Math.max(0,t-.3)*7)*.12;
+      elbow.lerp(new THREE.Vector3(.4,1.08,.16),lift);
+      hand.lerp(new THREE.Vector3(.08+across,1.32,.19),lift);
     }
     limb(g, `arm${side}`, shoulder, elbow);
     limb(g, `forearm${side}`, elbow, hand);

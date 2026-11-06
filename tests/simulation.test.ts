@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   initial,
   cleanPuddle,
-  leaveSweat,
+  addWorkoutSweat,
   expand,
   rent,
   buy,
@@ -1088,24 +1088,6 @@ test("corner expansion preserves the L-shaped notch and has a protected left hal
 });
 
 
-test("completed workouts can leave seeded sweat once, without blocking floor use",()=>{
- const s=initial("closet");buy(s,"rack",3,3,0);s.spawn=99999;s.seed=1;
- const item=s.items[0];member(s,{...access(item),type:0,state:"using",target:item.id,timer:.01,routine:["rack"]});
- s.paused=false;tick(s,.05);assert.equal(s.puddles!.length,1);
- const puddle=s.puddles![0];assert.deepEqual(puddle,access(item));assert.ok(pathTo(s.items,{x:5,z:11},puddle,s.property,s.expanded));
- tick(s,.05);assert.equal(s.puddles!.length,1);
- const saved=deserialize(JSON.stringify(s));assert.deepEqual(saved.puddles,s.puddles);
- const old={...s} as any;delete old.puddles;assert.deepEqual(deserialize(JSON.stringify(old)).puddles,[]);
- assert.throws(()=>deserialize(JSON.stringify({...s,puddles:[{x:99,z:99}]})),/cleanliness/);
-});
-test("paused games create no sweat; active sweat is deterministic and never duplicates tiles",()=>{
- const a=gym(),b=gym();const seed=a.seed;
- assert.equal(leaveSweat(a,a.items[0],0),false);assert.equal(a.seed,seed);
- a.paused=b.paused=false;
- for(let n=0;n<100;n++){leaveSweat(a,a.items[0],0);leaveSweat(b,b.items[0],0);}
- assert.deepEqual(a.puddles,b.puddles);assert.equal(new Set(a.puddles!.map(p=>`${p.x},${p.z}`)).size,a.puddles!.length);
- assert.ok(a.puddles!.length>0);
-});
 test("nearby sweat prompts a thought, cleaning stops exposure and does not cost money",()=>{
  const s=initial();s.spawn=99999;s.puddles=[{x:5,z:8}];
  const near=member(s,{x:5,z:8,state:"resting",timer:999});
@@ -1119,12 +1101,37 @@ test("nearby sweat prompts a thought, cleaning stops exposure and does not cost 
 });
 
 
-test("sweat stays on the workout departure tile for every equipment orientation",()=>{
- for(const kind of ["rack","bike","freeweights","treadmill"] as const)for(let rotation=0;rotation<4;rotation++){
-  const s=initial();buy(s,kind,4,4,rotation);s.paused=false;s.seed=1;
-  assert.equal(leaveSweat(s,s.items[0],0),true);
-  assert.deepEqual(s.puddles,[access(s.items[0])]);
-  for(let n=0;n<30;n++)leaveSweat(s,s.items[0],0);
-  assert.deepEqual(s.puddles,[access(s.items[0])]);
- }
+test("individual sweat thresholds vary, persist and need multiple exercises",()=>{
+ const a=initial(),b=initial();
+ for(let n=0;n<12;n++) {const x=admit(a,0)!,y=admit(b,0)!;assert.equal(x.sweatThreshold,y.sweatThreshold);assert.ok(x.sweatThreshold!>=2&&x.sweatThreshold!<3.5);}
+ assert.ok(new Set(a.members.map(m=>m.sweatThreshold)).size>1);
+ const m=member(a,{state:"resting",timer:999});addWorkoutSweat(a,m,"rack");assert.ok(m.sweat!<m.sweatThreshold!);
+ addWorkoutSweat(a,m,"rack");addWorkoutSweat(a,m,"treadmill");assert.ok(m.sweat!>=m.sweatThreshold!);
+ assert.equal(deserialize(JSON.stringify(a)).members.at(-1)!.sweat,m.sweat);
+});
+function sweatyWalker(){
+ const s=initial();s.spawn=99999;const m=member(s,{x:5,z:8,state:"leaving",path:[{x:5,z:9},{x:5,z:10},{x:5,z:11}],sweat:2.5,sweatThreshold:2});return {s,m};
+}
+test("a threshold wipe pauses movement, drops sweat on that tile, then resumes",()=>{
+ const {s,m}=sweatyWalker();s.paused=false;
+ tick(s,.05);assert.ok(m.wipe);assert.deepEqual(s.puddles,[]);assert.equal(m.z,8);
+ const saved=deserialize(JSON.stringify(s));assert.ok(saved.members[0].wipe);
+ s.paused=true;tick(s,10);assert.equal(m.wipe!.elapsed,.05);assert.deepEqual(s.puddles,[]);
+ s.paused=false;for(let n=0;n<16;n++)tick(s,.05);
+ assert.deepEqual(s.puddles,[{x:5,z:8}]);assert.equal(m.sweat,.5);assert.equal(m.z,8);
+ for(let n=0;n<20;n++)tick(s,.05);assert.equal(m.wipe,undefined);assert.ok(m.z>8);assert.equal(s.puddles!.length,1);
+});
+test("no cosmetic wipes below threshold, on queues, or above existing sweat",()=>{
+ const {s,m}=sweatyWalker();s.paused=false;m.sweat=1;tick(s,.05);assert.equal(m.wipe,undefined);assert.deepEqual(s.puddles,[]);
+ m.sweat=3;m.x=5;m.z=8;m.path=[];s.puddles=[{x:5,z:8}];tick(s,.05);assert.equal(m.wipe,undefined);
+ const q=initial();buy(q,"bike",4,4,0);q.spawn=99999;q.paused=false;
+ const waiting=member(q,{...access(q.items[0]),state:"resting",timer:999,sweat:3,sweatThreshold:2});
+ tick(q,.05);assert.equal(waiting.wipe,undefined);
+});
+test("save/load during a wipe creates exactly one puddle",()=>{
+ const {s}=sweatyWalker();s.paused=false;tick(s,.05);
+ let loaded=deserialize(JSON.stringify(s));loaded.paused=false;
+ for(let n=0;n<17;n++)tick(loaded,.05);assert.equal(loaded.puddles!.length,1);
+ loaded=deserialize(JSON.stringify(loaded));loaded.paused=false;
+ for(let n=0;n<40;n++)tick(loaded,.05);assert.equal(loaded.puddles!.length,1);
 });

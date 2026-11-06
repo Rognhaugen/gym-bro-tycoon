@@ -85,6 +85,9 @@ export interface Member extends Cell {
   needs?: NeedMetrics;
   noiseSeconds?: number;
   dirtSeconds?: number;
+  sweat?: number;
+  sweatThreshold?: number;
+  wipe?: { elapsed:number; dropped:boolean };
   retriedActivity?: number;
   thought?: { topic: string; text: string; at: number };
   thoughtTopics?: string[];
@@ -641,6 +644,8 @@ export function admit(s: State, type: number) {
     id: s.nextId++,
     name,
     appearance,
+    sweat:0,
+    sweatThreshold:2+random(s)*1.5,
     type,
     ...ENTRANCE,
     state: "walking",
@@ -719,6 +724,7 @@ export function tick(s: State, dt: number) {
         if(m.dirtSeconds>=5){visitorThought(s,m,"cleanliness");m.feedback="Someone skipped towel day. This floor needs cleaning.";}
       }
     }
+    if(updateWipe(s,m,dt))continue;
     if (m.state === "leaving") {
       if (move(m, dt)) finishVisit(s, m);
       continue;
@@ -832,7 +838,7 @@ export function tick(s: State, dt: number) {
       m.score -= 20;
       leave(s, m, "Equipment quit before I did.");
     } else if (m.timer <= 0) {
-      leaveSweat(s,i,m.type);
+      addWorkoutSweat(s,m,i.kind);
       m.activity++;
       if (m.activity >= m.routine.length) {
         if (m.score >= 85) visitorThought(s, m, "good");
@@ -968,6 +974,9 @@ export function deserialize(raw: string): State {
     if (m.thoughtTopics && (!Array.isArray(m.thoughtTopics) ||
       m.thoughtTopics.some((topic: unknown) => typeof topic !== "string" || !Object.hasOwn(THOUGHTS, topic))))
       throw Error("Damaged visitor thought history.");
+    if(m.sweat !== undefined && (!Number.isFinite(m.sweat)||m.sweat<0))throw Error("Damaged sweat buildup.");
+    if(m.sweatThreshold !== undefined && (!Number.isFinite(m.sweatThreshold)||m.sweatThreshold<2||m.sweatThreshold>3.5))throw Error("Damaged sweat threshold.");
+    if(m.wipe && (typeof m.wipe.dropped!=="boolean"||!Number.isFinite(m.wipe.elapsed)||m.wipe.elapsed<0||m.wipe.elapsed>1.3))throw Error("Damaged sweat wipe.");
     if(m.dirtSeconds !== undefined && (!Number.isFinite(m.dirtSeconds)||m.dirtSeconds<0))throw Error("Damaged dirt exposure.");
     if (m.noiseSeconds !== undefined && (!Number.isFinite(m.noiseSeconds) || m.noiseSeconds < 0))
       throw Error("Damaged noise exposure.");
@@ -1038,13 +1047,25 @@ export function expand(s:State):string {
 }
 
 
-export function leaveSweat(s:State,item:Item,type:number):boolean {
-  if(s.paused||s.bankrupt||random(s)> (type===0 ? .35 : .2))return false;
-  // Exercisers step back onto queue tile 1 when finishing. Leave sweat
-  // there, where their feet reach the floor, rather than scattering it nearby.
-  const tile=access(item);
-  if(!roomContains(s.property,tile,Boolean(s.expanded))||same(tile,ENTRANCE)||doorwayReserved(s.property,tile)||(s.puddles??[]).some(p=>same(p,tile)))return false;
-  (s.puddles??=[]).push({...tile});
+export function addWorkoutSweat(s:State,m:Member,kind:Kind) {
+  m.sweatThreshold ??= 2+random(s)*1.5;
+  m.sweat=(m.sweat??0)+({rack:1.2,treadmill:1.15,bike:.85,freeweights:.9}[kind]);
+}
+function updateWipe(s:State,m:Member,dt:number):boolean {
+  if(!m.wipe) {
+    if(m.state === "using"||m.state === "waiting"||(m.sweat??0)<(m.sweatThreshold??Infinity))return false;
+    const tile={x:Math.round(m.x),z:Math.round(m.z)};
+    if(Math.hypot(m.x-tile.x,m.z-tile.z)>.01||same(tile,ENTRANCE)||doorwayReserved(s.property,tile)||blockedCells(s.items,true,undefined,s.property,s.expanded).has(key(tile))||(s.puddles??[]).some(p=>same(p,tile))||s.members.some(n=>n.id!==m.id&&n.wipe&&same(n,tile)))return false;
+    m.wipe={elapsed:0,dropped:false};
+    m.feedback="Sweat has entered the chat. Quick forehead wipe.";
+  }
+  m.wipe.elapsed=Math.min(1.3,m.wipe.elapsed+dt);
+  if(!m.wipe.dropped&&m.wipe.elapsed>=.8) {
+    (s.puddles??=[]).push({x:Math.round(m.x),z:Math.round(m.z)});
+    m.sweat=Math.max(0,(m.sweat??0)-(m.sweatThreshold??0));
+    m.wipe.dropped=true;
+  }
+  if(m.wipe.elapsed>=1.3)delete m.wipe;
   return true;
 }
 export function cleanPuddle(s:State,c:Cell):boolean {
